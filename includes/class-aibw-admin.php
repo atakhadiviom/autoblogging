@@ -373,7 +373,7 @@ class AIBW_Admin {
             wp_die('Insufficient permissions');
         }
         
-        $settings = $this->api_handler->get_settings();
+        $settings = get_option('aibw_settings', array());
         ?>
         <div class="wrap">
             <h1>AI Blog Writer Settings</h1>
@@ -386,7 +386,7 @@ class AIBW_Admin {
                             <th scope="row"><label for="openrouter-key">OpenRouter API Key</label></th>
                             <td>
                                 <input type="password" id="openrouter-key" name="openrouter_api_key" class="large-text" 
-                                       value="<?php echo esc_attr($settings['openrouter_api_key']); ?>" 
+                                       value="<?php echo esc_attr($settings['openrouter_api_key'] ?? ''); ?>" 
                                        placeholder="sk-or-v1-...">
                                 <p class="description">Get your key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a></p>
                             </td>
@@ -395,7 +395,7 @@ class AIBW_Admin {
                             <th scope="row"><label for="perplexity-key">Perplexity API Key</label></th>
                             <td>
                                 <input type="password" id="perplexity-key" name="perplexity_api_key" class="large-text" 
-                                       value="<?php echo esc_attr($settings['perplexity_api_key']); ?>" 
+                                       value="<?php echo esc_attr($settings['perplexity_api_key'] ?? ''); ?>" 
                                        placeholder="pplx-...">
                                 <p class="description">Get your key from <a href="https://www.perplexity.ai/settings" target="_blank">Perplexity</a></p>
                             </td>
@@ -408,21 +408,21 @@ class AIBW_Admin {
                             <th scope="row"><label for="default-model">Default Model (OpenRouter)</label></th>
                             <td>
                                 <input type="text" id="default-model" name="default_model" class="large-text" 
-                                       value="<?php echo esc_attr($settings['default_model']); ?>">
+                                       value="<?php echo esc_attr($settings['default_model'] ?? ''); ?>">
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="perplexity-model">Perplexity Model</label></th>
                             <td>
                                 <input type="text" id="perplexity-model" name="perplexity_model" class="large-text" 
-                                       value="<?php echo esc_attr($settings['perplexity_model']); ?>">
+                                       value="<?php echo esc_attr($settings['perplexity_model'] ?? ''); ?>">
                             </td>
                         </tr>
                         <tr>
                             <th scope="row"><label for="max-tokens">Max Tokens</label></th>
                             <td>
                                 <input type="number" id="max-tokens" name="max_tokens" 
-                                       value="<?php echo esc_attr($settings['max_tokens']); ?>" 
+                                       value="<?php echo esc_attr($settings['max_tokens'] ?? ''); ?>" 
                                        style="width: 100px;">
                                 <p class="description">Higher values allow longer responses (default: 2000)</p>
                             </td>
@@ -431,7 +431,7 @@ class AIBW_Admin {
                             <th scope="row"><label for="temperature">Temperature</label></th>
                             <td>
                                 <input type="number" id="temperature" name="temperature" step="0.1" min="0" max="2" 
-                                       value="<?php echo esc_attr($settings['temperature']); ?>" 
+                                       value="<?php echo esc_attr($settings['temperature'] ?? ''); ?>" 
                                        style="width: 100px;">
                                 <p class="description">0.0-2.0 (higher = more creative, default: 0.7)</p>
                             </td>
@@ -440,7 +440,7 @@ class AIBW_Admin {
                             <th scope="row"><label for="default-author">Default Author</label></th>
                             <td>
                                 <input type="number" id="default-author" name="default_author" 
-                                       value="<?php echo esc_attr($settings['default_author']); ?>" 
+                                       value="<?php echo esc_attr($settings['default_author'] ?? ''); ?>" 
                                        style="width: 100px;">
                                 <p class="description">User ID for generated posts (default: current user)</p>
                             </td>
