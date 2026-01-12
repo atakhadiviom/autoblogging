@@ -609,10 +609,18 @@ jQuery(document).ready(function($) {
     $('#settings-form').on('submit', function(e) {
         e.preventDefault();
         
+        console.log('Settings form submitted'); // DEBUG
+        
         var $form = $(this);
         var $btn = $('#save-settings-btn');
         var $loading = $('#settings-loading');
         var $result = $('#settings-result');
+        
+        console.log('Elements found:', {
+            btn: $btn.length,
+            loading: $loading.length,
+            result: $result.length
+        }); // DEBUG
         
         var openrouterKey = $('#openrouter-key').val().trim();
         var perplexityKey = $('#perplexity-key').val().trim();
@@ -641,13 +649,15 @@ jQuery(document).ready(function($) {
                 default_author: defaultAuthor
             },
             success: function(response) {
+                console.log('AJAX Success:', response); // DEBUG
                 if (response.success) {
                     $result.html('<div class="notice notice-success"><p>✅ ' + response.data + '</p></div>');
                 } else {
                     $result.html('<div class="notice notice-error"><p>❌ Error: ' + response.data + '</p></div>');
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.log('AJAX Error:', {xhr, status, error}); // DEBUG
                 $result.html('<div class="notice notice-error"><p>❌ AJAX request failed. Please check your connection.</p></div>');
             },
             complete: function() {
