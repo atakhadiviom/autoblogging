@@ -192,4 +192,60 @@ class AIBW_API_Handler {
     public function get_settings() {
         return $this->settings;
     }
+    
+    /**
+     * Test OpenRouter API connection
+     */
+    public function test_openrouter() {
+        if (empty($this->settings['openrouter_api_key'])) {
+            return array(
+                'success' => false,
+                'message' => 'No API key configured'
+            );
+        }
+        
+        $prompt = "Test message. Respond with 'OpenRouter connection successful' only.";
+        
+        $response = $this->generate_with_openrouter($prompt);
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
+            );
+        }
+        
+        return array(
+            'success' => true,
+            'message' => 'Connected successfully. Response: ' . substr($response, 0, 100)
+        );
+    }
+    
+    /**
+     * Test Perplexity API connection
+     */
+    public function test_perplexity() {
+        if (empty($this->settings['perplexity_api_key'])) {
+            return array(
+                'success' => false,
+                'message' => 'No API key configured'
+            );
+        }
+        
+        $query = "Test connection";
+        
+        $response = $this->research_with_perplexity($query);
+        
+        if (is_wp_error($response)) {
+            return array(
+                'success' => false,
+                'message' => $response->get_error_message()
+            );
+        }
+        
+        return array(
+            'success' => true,
+            'message' => 'Connected successfully. Response length: ' . strlen($response) . ' chars'
+        );
+    }
 }

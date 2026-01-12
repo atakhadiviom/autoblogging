@@ -604,4 +604,172 @@ jQuery(document).ready(function($) {
             }
         });
     });
+    
+    // Settings form handler
+    $('#settings-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $btn = $('#save-settings-btn');
+        var $loading = $('#settings-loading');
+        var $result = $('#settings-result');
+        
+        var openrouterKey = $('#openrouter-key').val().trim();
+        var perplexityKey = $('#perplexity-key').val().trim();
+        var defaultModel = $('#default-model').val().trim();
+        var perplexityModel = $('#perplexity-model').val().trim();
+        var maxTokens = $('#max-tokens').val().trim();
+        var temperature = $('#temperature').val().trim();
+        var defaultAuthor = $('#default-author').val().trim();
+        
+        $btn.prop('disabled', true);
+        $loading.show();
+        $result.html('<div class="notice notice-info"><p>Saving settings...</p></div>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_save_settings',
+                nonce: aibw_ajax.nonce,
+                openrouter_api_key: openrouterKey,
+                perplexity_api_key: perplexityKey,
+                default_model: defaultModel,
+                perplexity_model: perplexityModel,
+                max_tokens: maxTokens,
+                temperature: temperature,
+                default_author: defaultAuthor
+            },
+            success: function(response) {
+                if (response.success) {
+                    $result.html('<div class="notice notice-success"><p>✅ ' + response.data + '</p></div>');
+                } else {
+                    $result.html('<div class="notice notice-error"><p>❌ Error: ' + response.data + '</p></div>');
+                }
+            },
+            error: function() {
+                $result.html('<div class="notice notice-error"><p>❌ AJAX request failed. Please check your connection.</p></div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+                $loading.hide();
+            }
+        });
+    });
+    
+    // Generate post form handler (main page)
+    $('#generate-post-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $btn = $('#generate-btn');
+        var $loading = $('#generate-loading');
+        var $result = $('#generation-result');
+        
+        var topic = $('#post-topic').val().trim();
+        var keywords = $('#post-keywords').val().trim();
+        var tone = $('#post-tone').val();
+        var status = $('#post-status').val();
+        
+        if (!topic) {
+            alert('Please enter a topic');
+            return;
+        }
+        
+        $btn.prop('disabled', true);
+        $loading.show();
+        $result.html('<div class="notice notice-info"><p>Generating post... This may take 30-60 seconds.</p></div>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_generate_post',
+                nonce: aibw_ajax.nonce,
+                topic: topic,
+                keywords: keywords,
+                tone: tone,
+                status: status
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px;">';
+                    html += '<h3>✅ ' + data.message + '</h3>';
+                    html += '<p><strong>Title:</strong> ' + data.title + '</p>';
+                    html += '<p><strong>Preview:</strong> ' + data.preview + '</p>';
+                    html += '<p><strong>Post ID:</strong> ' + data.post_id + '</p>';
+                    html += '<p>';
+                    html += '<a href="' + data.post_url + '" target="_blank" class="button button-primary">View Post</a> ';
+                    html += '<a href="' + aibw_ajax.admin_url + '?post=' + data.post_id + '&action=edit" target="_blank" class="button button-secondary">Edit in WordPress</a>';
+                    html += '</p>';
+                    html += '</div>';
+                    $result.html(html);
+                } else {
+                    var errorHtml = '<div class="notice notice-error"><p><strong>Error:</strong> ' + response.data + '</p></div>';
+                    $result.html(errorHtml);
+                }
+            },
+            error: function() {
+                $result.html('<div class="notice notice-error"><p>AJAX request failed. Please check your connection and try again.</p></div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+                $loading.hide();
+            }
+        });
+    });
+    
+    // Generate ideas form handler
+    $('#ideas-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $btn = $('#ideas-btn');
+        var $result = $('#ideas-result');
+        
+        var topic = $('#ideas-topic').val().trim();
+        var count = $('#ideas-count').val().trim();
+        
+        if (!topic) {
+            alert('Please enter a topic');
+            return;
+        }
+        
+        $btn.prop('disabled', true).text('Generating...');
+        $result.html('<p>Generating ideas...</p>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_generate_post', // Use existing handler for ideas
+                nonce: aibw_ajax.nonce,
+                topic: topic,
+                keywords: '',
+                tone: 'professional',
+                status: 'draft'
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">';
+                    html += '<h4>Generated Idea:</h4>';
+                    html += '<p><strong>' + data.title + '</strong></p>';
+                    html += '<p>' + data.preview + '</p>';
+                    html += '<p><a href="' + data.post_url + '" target="_blank" class="button button-small">View Draft</a></p>';
+                    html += '</div>';
+                    $result.html(html);
+                } else {
+                    $result.html('<div style="color: red;">Error: ' + response.data + '</div>');
+                }
+            },
+            error: function() {
+                $result.html('<div style="color: red;">AJAX request failed</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Generate Ideas');
+            }
+        });
+    });
 });
