@@ -1,6 +1,7 @@
 <?php
 /**
- * Blog Post Generator
+ * Post Generator Class
+ * Handles blog post generation using AI APIs
  */
 
 if (!defined('ABSPATH')) {
@@ -10,205 +11,227 @@ if (!defined('ABSPATH')) {
 class AIBW_Post_Generator {
     
     private $api_handler;
-    private $settings;
     
-    public function __construct($api_handler, $settings) {
+    public function __construct($api_handler) {
         $this->api_handler = $api_handler;
-        $this->settings = $settings;
     }
     
     /**
      * Generate a complete blog post
      */
-    public function generate_post($topic, $use_research = true) {
-        // Validate topic
-        if (empty(trim($topic))) {
-            return new WP_Error('empty_topic', 'Topic cannot be empty');
+    public function generate_post($topic, $keywords = array(), $tone = 'professional') {
+        // Step 1: Research with Perplexity
+        $research = $this->research_topic($topic);
+        if (is_wp_error($research)) {
+            return $research;
         }
         
-        $research_data = '';
-        
-        // Step 1: Research with Perplexity (if enabled)
-        if ($use_research) {
-            $research_result = $this->api_handler->research_with_perplexity($topic);
-            
-            if (!is_wp_error($research_result)) {
-                $research_data = $research_result;
-            } else {
-                // Log error but continue without research
-                error_log('AI Blog Writer: Research failed - ' . $research_result->get_error_message());
-            }
+        // Step 2: Create outline with OpenRouter
+        $outline = $this->create_outline($topic, $research, $keywords);
+        if (is_wp_error($outline)) {
+            return $outline;
         }
         
-        // Step 2: Write blog post with OpenRouter
-        $post_content = $this->api_handler->write_blog_post($topic, $research_data);
-        
-        if (is_wp_error($post_content)) {
-            return $post_content;
+        // Step 3: Generate content with OpenRouter
+        $content = $this->write_content($topic, $outline, $research, $tone);
+        if (is_wp_error($content)) {
+            return $content;
         }
         
-        // Step 3: Generate SEO title
-        $seo_title = $this->generate_seo_title($topic);
+        // Step 4: Format for WordPress
+        $formatted_content = $this->format_for_wordpress($content, $topic);
         
-        // Step 4: Generate excerpt
-        $excerpt = $this->generate_excerpt($post_content);
-        
-        // Step 5: Create the post
-        $post_id = $this->create_wordpress_post($topic, $post_content, $seo_title, $excerpt);
-        
-        return $post_id;
-    }
-    
-    /**
-     * Generate SEO-friendly title
-     */
-    private function generate_seo_title($topic) {
-        $system_prompt = "Generate a compelling, SEO-friendly title for a blog post. Keep it under 60 characters. Make it catchy and include keywords.";
-        
-        $prompt = "Create a title for a blog post about: {$topic}";
-        
-        $title = $this->api_handler->generate_with_openrouter($prompt, $system_prompt);
-        
-        if (is_wp_error($title)) {
-            // Fallback to simple title
-            return substr($topic, 0, 60);
-        }
-        
-        // Clean up the title
-        $title = trim($title);
-        $title = preg_replace('/^"(.*)"$/s', '$1', $title); // Remove quotes
-        $title = substr($title, 0, 60);
-        
-        return $title;
-    }
-    
-    /**
-     * Generate excerpt from content
-     */
-    private function generate_excerpt($content) {
-        $system_prompt = "Create a compelling 150-160 character excerpt that summarizes the main points and entices readers to click.";
-        
-        $prompt = "Summarize this content into a short excerpt:\n\n" . substr($content, 0, 1000);
-        
-        $excerpt = $this->api_handler->generate_with_openrouter($prompt, $system_prompt);
-        
-        if (is_wp_error($excerpt)) {
-            // Fallback to manual excerpt
-            $excerpt = substr(strip_tags($content), 0, 155) . '...';
-        }
-        
-        // Clean up
-        $excerpt = trim($excerpt);
-        $excerpt = preg_replace('/^"(.*)"$/s', '$1', $excerpt);
-        $excerpt = substr($excerpt, 0, 160);
-        
-        return $excerpt;
-    }
-    
-    /**
-     * Create WordPress post
-     */
-    private function create_wordpress_post($title, $content, $seo_title, $excerpt) {
-        $category_id = $this->settings->get_option('post_category', 1);
-        $post_status = $this->settings->get_option('post_status', 'draft');
-        
-        // Prepare post data
-        $post_data = array(
-            'post_title' => $seo_title,
-            'post_content' => $content,
-            'post_excerpt' => $excerpt,
-            'post_status' => $post_status,
-            'post_category' => array($category_id),
-            'post_author' => get_current_user_id(),
-            'post_type' => 'post'
+        return array(
+            'title' => $this->generate_title($topic, $keywords),
+            'content' => $formatted_content,
+            'research' => $research,
+            'outline' => $outline
         );
-        
-        // Add custom meta for tracking
-        $post_id = wp_insert_post($post_data);
-        
-        if ($post_id && !is_wp_error($post_id)) {
-            // Add meta data
-            update_post_meta($post_id, '_aibw_generated', true);
-            update_post_meta($post_id, '_aibw_topic', $topic);
-            update_post_meta($post_id, '_aibw_generation_time', current_time('mysql'));
-            update_post_meta($post_id, '_aibw_used_research', !empty($research_data));
-            
-            // Add AI disclaimer as HTML comment
-            $ai_comment = "<!-- This post was generated using AI Blog Writer with OpenRouter and Perplexity APIs -->";
-            wp_update_post(array(
-                'ID' => $post_id,
-                'post_content' => $ai_comment . "\n" . $content
-            ));
-        }
-        
-        return $post_id;
     }
     
     /**
-     * Generate post from existing research
+     * Research topic using Perplexity
      */
-    public function generate_from_research($topic, $research_text) {
-        $post_content = $this->api_handler->write_blog_post($topic, $research_text);
+    private function research_topic($topic) {
+        $prompt = "Research the topic: {$topic}. Provide key facts, statistics, trends, and important points to cover. Be concise but comprehensive.";
         
-        if (is_wp_error($post_content)) {
-            return $post_content;
-        }
-        
-        $seo_title = $this->generate_seo_title($topic);
-        $excerpt = $this->generate_excerpt($post_content);
-        
-        return $this->create_wordpress_post($topic, $post_content, $seo_title, $excerpt);
+        return $this->api_handler->research_with_perplexity($prompt);
     }
     
     /**
-     * Generate multiple posts in batch
+     * Create content outline
      */
-    public function generate_batch($topics, $use_research = true) {
-        $results = array();
+    private function create_outline($topic, $research, $keywords) {
+        $prompt = "Create a detailed outline for a blog post about: {$topic}\n\n";
+        $prompt .= "Research findings: {$research}\n\n";
         
-        foreach ($topics as $topic) {
-            $result = $this->generate_post($topic, $use_research);
-            $results[] = array(
-                'topic' => $topic,
-                'result' => $result,
-                'success' => !is_wp_error($result)
-            );
-            
-            // Small delay to avoid rate limits
-            sleep(1);
+        if (!empty($keywords)) {
+            $prompt .= "Keywords to include: " . implode(", ", $keywords) . "\n\n";
         }
         
-        return $results;
+        $prompt .= "Structure the outline with:\n";
+        $prompt .= "1. Introduction (hook, thesis)\n";
+        $prompt .= "2. Main sections (3-5 key points)\n";
+        $prompt .= "3. Subsections for each main point\n";
+        $prompt .= "4. Conclusion (summary, call-to-action)\n\n";
+        $prompt .= "Format as a numbered list with clear hierarchy.";
+        
+        return $this->api_handler->generate_with_openrouter($prompt);
     }
     
     /**
-     * Generate post with specific API preference
+     * Write the actual content
      */
-    public function generate_with_api($topic, $api = 'openrouter') {
-        if ($api === 'perplexity') {
-            // Use Perplexity for both research and writing
-            $research = $this->api_handler->research_with_perplexity($topic);
-            if (!is_wp_error($research)) {
-                $content = $this->api_handler->generate_with_perplexity(
-                    "Write a blog post about: {$topic}\n\nUse this research: {$research}"
-                );
-            } else {
-                $content = $this->api_handler->generate_with_perplexity(
-                    "Write a comprehensive blog post about: {$topic}"
-                );
-            }
-        } else {
-            // Default to OpenRouter
-            return $this->generate_post($topic, true);
+    private function write_content($topic, $outline, $research, $tone) {
+        $prompt = "Write a comprehensive blog post about: {$topic}\n\n";
+        $prompt .= "Tone: {$tone}\n\n";
+        $prompt .= "Outline to follow:\n{$outline}\n\n";
+        $prompt .= "Research to incorporate:\n{$research}\n\n";
+        $prompt .= "Requirements:\n";
+        $prompt .= "- Write in first or second person\n";
+        $prompt .= "- Include engaging introductions\n";
+        $prompt .= "- Use subheadings\n";
+        $prompt .= "- Add bullet points where appropriate\n";
+        $prompt .= "- Include examples and actionable advice\n";
+        $prompt .= "- End with a conclusion\n";
+        $prompt .= "- Aim for 800-1500 words\n";
+        
+        return $this->api_handler->generate_with_openrouter($prompt);
+    }
+    
+    /**
+     * Generate title
+     */
+    private function generate_title($topic, $keywords) {
+        $prompt = "Generate 3 compelling blog post titles for: {$topic}\n\n";
+        
+        if (!empty($keywords)) {
+            $prompt .= "Keywords to include: " . implode(", ", $keywords) . "\n\n";
         }
+        
+        $prompt .= "Format each title on a new line. Make them SEO-friendly and click-worthy.";
+        
+        $result = $this->api_handler->generate_with_openrouter($prompt);
+        
+        if (is_wp_error($result)) {
+            return $topic; // Fallback
+        }
+        
+        $titles = explode("\n", $result);
+        return trim($titles[0]) ?: $topic;
+    }
+    
+    /**
+     * Format content for WordPress
+     */
+    private function format_for_wordpress($content, $topic) {
+        // Convert plain text to WordPress HTML
+        $formatted = $content;
+        
+        // Convert double line breaks to paragraphs
+        $formatted = preg_replace('/\n\n+/', '</p><p>', $formatted);
+        $formatted = '<p>' . $formatted . '</p>';
+        
+        // Convert single line breaks to <br> within paragraphs
+        $formatted = str_replace("\n", '<br>', $formatted);
+        
+        // Ensure proper heading structure
+        $formatted = preg_replace('/^(\d+\.\s)(.+)$/m', '<h3>$2</h3>', $formatted);
+        $formatted = preg_replace('/^##\s(.+)$/m', '<h2>$1</h2>', $formatted);
+        $formatted = preg_replace('/^#\s(.+)$/m', '<h2>$1</h2>', $formatted);
+        
+        // Clean up any multiple <br> tags
+        $formatted = preg_replace('/(<br>\s*)+/', '<br>', $formatted);
+        
+        return $formatted;
+    }
+    
+    /**
+     * Generate post with specific research focus
+     */
+    public function generate_researched_post($topic, $focus_areas = array()) {
+        $research_prompt = "Research these specific aspects of {$topic}: " . implode(", ", $focus_areas);
+        $research = $this->api_handler->research_with_perplexity($research_prompt);
+        
+        if (is_wp_error($research)) {
+            return $research;
+        }
+        
+        $content_prompt = "Write a detailed article about {$topic} focusing on: " . implode(", ", $focus_areas) . "\n\n";
+        $content_prompt .= "Research: {$research}\n\n";
+        $content_prompt .= "Include: definitions, examples, statistics, and actionable advice.";
+        
+        $content = $this->api_handler->generate_with_openrouter($content_prompt);
         
         if (is_wp_error($content)) {
             return $content;
         }
         
-        $seo_title = $this->generate_seo_title($topic);
-        $excerpt = $this->generate_excerpt($content);
+        return array(
+            'title' => $this->generate_title($topic, $focus_areas),
+            'content' => $this->format_for_wordpress($content, $topic),
+            'research' => $research
+        );
+    }
+    
+    /**
+     * Create WordPress post
+     */
+    public function create_wordpress_post($post_data, $status = 'draft') {
+        $post_id = wp_insert_post(array(
+            'post_title' => sanitize_text_field($post_data['title']),
+            'post_content' => wp_kses_post($post_data['content']),
+            'post_status' => $status,
+            'post_author' => get_current_user_id(),
+            'post_category' => array(1) // Default to uncategorized
+        ));
         
-        return $this->create_wordpress_post($topic, $content, $seo_title, $excerpt);
+        if (is_wp_error($post_id)) {
+            return $post_id;
+        }
+        
+        // Store metadata
+        if (isset($post_data['research'])) {
+            update_post_meta($post_id, '_aibw_research', sanitize_text_field($post_data['research']));
+        }
+        
+        if (isset($post_data['outline'])) {
+            update_post_meta($post_id, '_aibw_outline', sanitize_text_field($post_data['outline']));
+        }
+        
+        update_post_meta($post_id, '_aibw_generated', true);
+        update_post_meta($post_id, '_aibw_generated_date', current_time('mysql'));
+        
+        return $post_id;
+    }
+    
+    /**
+     * Generate multiple post ideas
+     */
+    public function generate_post_ideas($main_topic, $count = 5) {
+        $prompt = "Generate {$count} blog post ideas around the main topic: {$main_topic}\n\n";
+        $prompt .= "For each idea, provide:\n";
+        $prompt .= "1. Title\n";
+        $prompt .= "2. Brief description (1-2 sentences)\n";
+        $prompt .= "3. Target keywords\n\n";
+        $prompt .= "Format each idea with clear separation.";
+        
+        $result = $this->api_handler->generate_with_openrouter($prompt);
+        
+        if (is_wp_error($result)) {
+            return array();
+        }
+        
+        // Parse ideas
+        $ideas = array();
+        $sections = explode("\n\n", $result);
+        
+        foreach ($sections as $section) {
+            if (strlen($section) > 20) {
+                $ideas[] = trim($section);
+            }
+        }
+        
+        return array_slice($ideas, 0, $count);
     }
 }

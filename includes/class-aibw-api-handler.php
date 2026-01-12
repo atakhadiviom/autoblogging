@@ -1,6 +1,7 @@
 <?php
 /**
- * API Handler for OpenRouter and Perplexity
+ * API Handler Class
+ * Handles communication with OpenRouter and Perplexity APIs
  */
 
 if (!defined('ABSPATH')) {
@@ -11,220 +12,184 @@ class AIBW_API_Handler {
     
     private $settings;
     
-    public function __construct($settings) {
-        $this->settings = $settings;
+    public function __construct() {
+        $this->settings = get_option('aibw_settings', array());
     }
     
     /**
      * Generate content using OpenRouter API
      */
-    public function generate_with_openrouter($prompt, $system_prompt = "You are a helpful assistant that writes engaging blog posts.") {
-        $api_key = $this->settings->get_option('openrouter_api_key');
-        
-        if (empty($api_key)) {
+    public function generate_with_openrouter($prompt, $model = null) {
+        if (empty($this->settings['openrouter_api_key'])) {
             return new WP_Error('no_api_key', 'OpenRouter API key not configured');
         }
         
-        $model = $this->settings->get_option('default_model', 'openrouter/meta-llama/llama-3.1-8b-instruct');
-        $temperature = $this->settings->get_option('temperature', 0.7);
-        $max_tokens = $this->settings->get_option('max_tokens', 2000);
+        $api_key = $this->settings['openrouter_api_key'];
+        $model = $model ?: $this->settings['default_model'];
         
         $payload = array(
             'model' => $model,
-            'messages' => array(
-                array(
-                    'role' => 'system',
-                    'content' => $system_prompt
-                ),
-                array(
-                    'role' => 'user',
-                    'content' => $prompt
-                )
-            ),
-            'temperature' => $temperature,
-            'max_tokens' => $max_tokens,
-            'stream' => false
+            'prompt' => $prompt,
+            'max_tokens' => intval($this->settings['max_tokens'] ?: 2000),
+            'temperature' => floatval($this->settings['temperature'] ?: 0.7)
         );
         
-        $response = $this->make_api_request(
-            'https://openrouter.ai/api/v1/chat/completions',
-            $api_key,
-            $payload
-        );
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        if (isset($response['choices'][0]['message']['content'])) {
-            return $response['choices'][0]['message']['content'];
-        }
-        
-        return new WP_Error('api_error', 'Invalid response from OpenRouter API');
-    }
-    
-    /**
-     * Generate content using Perplexity API
-     */
-    public function generate_with_perplexity($prompt, $system_prompt = "You are a helpful assistant that provides accurate, up-to-date information.") {
-        $api_key = $this->settings->get_option('perplexity_api_key');
-        
-        if (empty($api_key)) {
-            return new WP_Error('no_api_key', 'Perplexity API key not configured');
-        }
-        
-        // Perplexity uses similar format to OpenAI
-        $model = 'llama-3.1-8b-instruct'; // Default Perplexity model
-        $temperature = $this->settings->get_option('temperature', 0.7);
-        $max_tokens = $this->settings->get_option('max_tokens', 2000);
-        
-        $payload = array(
-            'model' => $model,
-            'messages' => array(
-                array(
-                    'role' => 'system',
-                    'content' => $system_prompt
-                ),
-                array(
-                    'role' => 'user',
-                    'content' => $prompt
-                )
-            ),
-            'temperature' => $temperature,
-            'max_tokens' => $max_tokens
-        );
-        
-        $response = $this->make_api_request(
-            'https://api.perplexity.ai/chat/completions',
-            $api_key,
-            $payload
-        );
-        
-        if (is_wp_error($response)) {
-            return $response;
-        }
-        
-        if (isset($response['choices'][0]['message']['content'])) {
-            return $response['choices'][0]['message']['content'];
-        }
-        
-        return new WP_Error('api_error', 'Invalid response from Perplexity API');
-    }
-    
-    /**
-     * Research topic using Perplexity (for current information)
-     */
-    public function research_with_perplexity($topic) {
-        $system_prompt = "You are a research assistant. Provide comprehensive, accurate, and up-to-date information about the given topic. Include key facts, statistics, and recent developments.";
-        
-        $prompt = "Research and provide detailed information about: {$topic}. Include relevant data, statistics, and current trends.";
-        
-        return $this->generate_with_perplexity($prompt, $system_prompt);
-    }
-    
-    /**
-     * Generate blog post using OpenRouter (for creative writing)
-     */
-    public function write_blog_post($topic, $research_data = '') {
-        $system_prompt = "You are an expert blog writer. Write engaging, well-structured blog posts with a conversational tone. Use headings, paragraphs, and make the content SEO-friendly.";
-        
-        $prompt = "Write a comprehensive blog post about: {$topic}";
-        
-        if (!empty($research_data)) {
-            $prompt .= "\n\nUse this research data as reference:\n" . $research_data;
-        }
-        
-        $prompt .= "\n\nStructure the post with:\n- Introduction\n- Main body with subheadings\n- Conclusion\n- Call to action";
-        
-        return $this->generate_with_openrouter($prompt, $system_prompt);
-    }
-    
-    /**
-     * Make HTTP request to API
-     */
-    private function make_api_request($url, $api_key, $payload) {
-        $args = array(
-            'method' => 'POST',
+        $response = wp_remote_post('https://openrouter.ai/api/v1/completions', array(
             'headers' => array(
-                'Content-Type' => 'application/json',
                 'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json',
                 'HTTP-Referer' => home_url(),
-                'X-Title' => 'AI Blog Writer WordPress Plugin'
+                'X-Title' => 'AI Blog Writer'
             ),
             'body' => json_encode($payload),
             'timeout' => 60
-        );
-        
-        $response = wp_remote_post($url, $args);
+        ));
         
         if (is_wp_error($response)) {
             return $response;
         }
         
-        $response_code = wp_remote_retrieve_response_code($response);
-        $response_body = wp_remote_retrieve_body($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
         
-        if ($response_code !== 200) {
-            return new WP_Error('api_error', "API request failed with code {$response_code}: {$response_body}");
+        if (isset($body['error'])) {
+            return new WP_Error('api_error', $body['error']['message']);
         }
         
-        $decoded_response = json_decode($response_body, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return new WP_Error('json_error', 'Invalid JSON response from API');
+        if (isset($body['choices'][0]['text'])) {
+            return $body['choices'][0]['text'];
         }
         
-        return $decoded_response;
+        return new WP_Error('parse_error', 'Could not parse API response');
     }
     
     /**
-     * Test API connections
+     * Research using Perplexity API
      */
-    public function test_openrouter_connection() {
-        $test_payload = array(
-            'model' => 'openrouter/meta-llama/llama-3.1-8b-instruct',
-            'messages' => array(
-                array('role' => 'user', 'content' => 'Hello')
-            ),
-            'max_tokens' => 5
-        );
-        
-        $api_key = $this->settings->get_option('openrouter_api_key');
-        
-        if (empty($api_key)) {
-            return new WP_Error('no_api_key', 'No API key configured');
+    public function research_with_perplexity($query, $model = null) {
+        if (empty($this->settings['perplexity_api_key'])) {
+            return new WP_Error('no_api_key', 'Perplexity API key not configured');
         }
         
-        $response = $this->make_api_request(
-            'https://openrouter.ai/api/v1/chat/completions',
-            $api_key,
-            $test_payload
+        $api_key = $this->settings['perplexity_api_key'];
+        $model = $model ?: $this->settings['perplexity_model'];
+        
+        $payload = array(
+            'model' => $model,
+            'query' => $query
         );
         
-        return !is_wp_error($response);
+        $response = wp_remote_post('https://api.perplexity.ai/chat/completions', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ),
+            'body' => json_encode($payload),
+            'timeout' => 60
+        ));
+        
+        if (is_wp_error($response)) {
+            return $response;
+        }
+        
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (isset($body['error'])) {
+            return new WP_Error('api_error', $body['error']['message']);
+        }
+        
+        if (isset($body['choices'][0]['message']['content'])) {
+            return $body['choices'][0]['message']['content'];
+        }
+        
+        return new WP_Error('parse_error', 'Could not parse API response');
     }
     
-    public function test_perplexity_connection() {
-        $test_payload = array(
-            'model' => 'llama-3.1-8b-instruct',
-            'messages' => array(
-                array('role' => 'user', 'content' => 'Hello')
-            ),
-            'max_tokens' => 5
-        );
+    /**
+     * Analyze comprehensiveness using OpenRouter
+     */
+    public function analyze_comprehensiveness($content) {
+        $prompt = "Analyze the following content for comprehensiveness. Rate it on a scale of 0-100 based on depth, coverage, and detail. Provide a brief explanation.\n\nContent: " . substr($content, 0, 2000);
         
-        $api_key = $this->settings->get_option('perplexity_api_key');
+        $result = $this->generate_with_openrouter($prompt);
         
-        if (empty($api_key)) {
-            return new WP_Error('no_api_key', 'No API key configured');
+        if (is_wp_error($result)) {
+            return array('score' => 0, 'explanation' => 'Analysis failed');
         }
         
-        $response = $this->make_api_request(
-            'https://api.perplexity.ai/chat/completions',
-            $api_key,
-            $test_payload
-        );
+        // Extract score from response
+        preg_match('/(\d+)/', $result, $matches);
+        $score = isset($matches[1]) ? intval($matches[1]) : 50;
         
-        return !is_wp_error($response);
+        return array(
+            'score' => min($score, 100),
+            'explanation' => $result
+        );
+    }
+    
+    /**
+     * Generate related topic suggestions using OpenRouter
+     */
+    public function generate_related_topics($main_topic, $existing_topics = array()) {
+        $prompt = "Generate 5-8 related blog post topics that would complement the main topic: '{$main_topic}'.\n";
+        
+        if (!empty($existing_topics)) {
+            $prompt .= "Avoid these existing topics: " . implode(", ", $existing_topics) . "\n";
+        }
+        
+        $prompt .= "Format each topic as a single line. Focus on subtopics, related concepts, and complementary angles.";
+        
+        $result = $this->generate_with_openrouter($prompt);
+        
+        if (is_wp_error($result)) {
+            return array();
+        }
+        
+        // Parse topics from response
+        $topics = array();
+        $lines = explode("\n", $result);
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (!empty($line) && strlen($line) > 5) {
+                // Remove numbering
+                $line = preg_replace('/^\d+[\.\)]\s*/', '', $line);
+                $topics[] = $line;
+            }
+        }
+        
+        return array_slice($topics, 0, 8);
+    }
+    
+    /**
+     * Validate API keys
+     */
+    public function validate_api_keys() {
+        $errors = array();
+        
+        if (empty($this->settings['openrouter_api_key'])) {
+            $errors[] = 'OpenRouter API key is missing';
+        }
+        
+        if (empty($this->settings['perplexity_api_key'])) {
+            $errors[] = 'Perplexity API key is missing';
+        }
+        
+        return empty($errors) ? true : $errors;
+    }
+    
+    /**
+     * Update settings
+     */
+    public function update_settings($new_settings) {
+        $this->settings = array_merge($this->settings, $new_settings);
+        update_option('aibw_settings', $this->settings);
+        return true;
+    }
+    
+    /**
+     * Get current settings
+     */
+    public function get_settings() {
+        return $this->settings;
     }
 }

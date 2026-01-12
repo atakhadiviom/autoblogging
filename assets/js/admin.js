@@ -230,4 +230,309 @@ jQuery(document).ready(function($) {
             }
         });
     });
+    
+    // Analyze single post for pillar potential
+    $('#analyze-single-btn').on('click', function() {
+        var $btn = $(this);
+        var $result = $('#single-analysis-result');
+        var postId = $('#analyze-post-id').val().trim();
+        
+        if (!postId || postId < 1) {
+            alert('Please enter a valid Post ID');
+            return;
+        }
+        
+        $btn.prop('disabled', true).text('Analyzing...');
+        $result.html('<p>Analyzing post...</p>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_analyze_post',
+                nonce: aibw_ajax.nonce,
+                post_id: postId
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">';
+                    
+                    html += '<h3>' + data.post_title + '</h3>';
+                    html += '<p><strong>Pillar Score:</strong> <span style="font-size: 24px; font-weight: bold; color: ' + 
+                           (data.is_pillar ? '#28a745' : '#ffc107') + ';">' + data.score + '%</span> ';
+                    html += data.is_pillar ? '✅ (Pillar Post)' : '⚠️ (Needs Improvement)'</p>';
+                    
+                    html += '<h4>Analysis Breakdown:</h4>';
+                    html += '<table class="wp-list-table widefat fixed striped"><thead><tr><th>Factor</th><th>Score</th><th>Status</th><th>Details</th></tr></thead><tbody>';
+                    
+                    for (var factor in data.factors) {
+                        var factorData = data.factors[factor];
+                        var statusIcon = factorData.status === 'good' ? '✅' : '⚠️';
+                        
+                        html += '<tr>';
+                        html += '<td><strong>' + factor.charAt(0).toUpperCase() + factor.slice(1) + '</strong></td>';
+                        html += '<td>' + (factorData.score * 100).toFixed(0) + '%</td>';
+                        html += '<td>' + statusIcon + ' ' + factorData.status + '</td>';
+                        
+                        var details = '';
+                        if (factor === 'word_count') details = factorData.value + ' words';
+                        else if (factor === 'structure') details = factorData.headings + ' headings, ' + factorData.paragraphs + ' paragraphs';
+                        else if (factor === 'links') details = factorData.internal + ' internal, ' + factorData.external + ' external';
+                        else if (factor === 'topics') details = factorData.unique_topics + ' topics';
+                        
+                        html += '<td>' + details + '</td>';
+                        html += '</tr>';
+                    }
+                    
+                    html += '</tbody></table>';
+                    
+                    if (data.recommendations.length > 0) {
+                        html += '<h4>Recommendations:</h4><ul>';
+                        data.recommendations.forEach(function(rec) {
+                            html += '<li>' + rec + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    html += '</div>';
+                    $result.html(html);
+                } else {
+                    $result.html('<div style="color: red;">Error: ' + response.data + '</div>');
+                }
+            },
+            error: function() {
+                $result.html('<div style="color: red;">AJAX request failed</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Analyze Post');
+            }
+        });
+    });
+    
+    // Get related post suggestions
+    $('#get-suggestions-btn').on('click', function() {
+        var $btn = $(this);
+        var $result = $('#suggestions-result');
+        var postId = $('#suggestion-post-id').val().trim();
+        var limit = $('#suggestion-limit').val().trim();
+        
+        if (!postId || postId < 1) {
+            alert('Please enter a valid Post ID');
+            return;
+        }
+        
+        $btn.prop('disabled', true).text('Getting Suggestions...');
+        $result.html('<p>Generating suggestions...</p>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_get_suggestions',
+                nonce: aibw_ajax.nonce,
+                post_id: postId,
+                limit: limit
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">';
+                    
+                    html += '<h3>Related Post Suggestions for: ' + data.pillar_post.post_title + '</h3>';
+                    
+                    // Existing related posts
+                    if (data.existing_related.length > 0) {
+                        html += '<h4>Existing Related Posts:</h4>';
+                        html += '<ul>';
+                        data.existing_related.forEach(function(related) {
+                            html += '<li><a href="' + related.post.guid + '" target="_blank">' + related.post.post_title + '</a> (' + related.relationship + ')</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    // New suggestions
+                    if (data.new_suggestions.length > 0) {
+                        html += '<h4>Suggested New Posts:</h4>';
+                        html += '<ol>';
+                        data.new_suggestions.forEach(function(suggestion) {
+                            html += '<li>' + suggestion + '</li>';
+                        });
+                        html += '</ol>';
+                    }
+                    
+                    // Key topics
+                    if (data.all_topics.length > 0) {
+                        html += '<h4>Key Topics Identified:</h4>';
+                        html += '<div style="display: flex; flex-wrap: wrap; gap: 5px;">';
+                        data.all_topics.slice(0, 10).forEach(function(topic) {
+                            html += '<span style="background: #007cba; color: white; padding: 3px 8px; border-radius: 12px; font-size: 12px;">' + topic + '</span>';
+                        });
+                        html += '</div>';
+                    }
+                    
+                    html += '</div>';
+                    $result.html(html);
+                } else {
+                    $result.html('<div style="color: red;">Error: ' + response.data + '</div>');
+                }
+            },
+            error: function() {
+                $result.html('<div style="color: red;">AJAX request failed</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Get Suggestions');
+            }
+        });
+    });
+    
+    // Bulk analyze posts
+    $('#bulk-analyze-btn').on('click', function() {
+        var $btn = $(this);
+        var $result = $('#bulk-results');
+        var limit = $('#bulk-limit').val().trim();
+        
+        if (!limit || limit < 1) {
+            alert('Please enter a valid number');
+            return;
+        }
+        
+        if (!confirm('This will analyze up to ' + limit + ' posts. This may take a while. Continue?')) {
+            return;
+        }
+        
+        $btn.prop('disabled', true).text('Analyzing...');
+        $result.html('<p>Analyzing posts... This may take several minutes.</p>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_bulk_analyze',
+                nonce: aibw_ajax.nonce,
+                limit: limit
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">';
+                    
+                    html += '<h3>Bulk Analysis Results</h3>';
+                    html += '<table class="wp-list-table widefat fixed striped">';
+                    html += '<thead><tr><th>Post</th><th>Score</th><th>Status</th><th>Actions</th></tr></thead>';
+                    html += '<tbody>';
+                    
+                    var pillarCount = 0;
+                    
+                    data.forEach(function(item) {
+                        var analysis = item.analysis;
+                        var isPillar = analysis.is_pillar;
+                        if (isPillar) pillarCount++;
+                        
+                        html += '<tr>';
+                        html += '<td>' + analysis.post_title + '</td>';
+                        html += '<td><strong>' + analysis.score + '%</strong></td>';
+                        html += '<td>' + (isPillar ? '✅ Pillar' : '⚠️ Standard') + '</td>';
+                        html += '<td><button class="button button-small view-analysis-btn" data-post-id="' + item.post_id + '">View Details</button></td>';
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table>';
+                    html += '<p><strong>Summary:</strong> ' + pillarCount + ' pillar posts found out of ' + data.length + ' analyzed</p>';
+                    html += '</div>';
+                    
+                    $result.html(html);
+                } else {
+                    $result.html('<div style="color: red;">Error: ' + response.data + '</div>');
+                }
+            },
+            error: function() {
+                $result.html('<div style="color: red;">AJAX request failed</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Start Bulk Analysis');
+            }
+        });
+    });
+    
+    // Find existing pillar posts
+    $('#find-pillars-btn').on('click', function() {
+        var $btn = $(this);
+        var $result = $('#pillars-list');
+        
+        $btn.prop('disabled', true).text('Finding...');
+        $result.html('<p>Searching for pillar posts...</p>');
+        
+        // This uses the existing AJAX handler for bulk analysis but with a different approach
+        // Since we don't have a dedicated "find pillars" endpoint, we'll analyze recent posts
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_bulk_analyze',
+                nonce: aibw_ajax.nonce,
+                limit: 20
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var pillarPosts = data.filter(function(item) {
+                        return item.analysis.is_pillar;
+                    });
+                    
+                    var html = '<div style="padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">';
+                    
+                    if (pillarPosts.length === 0) {
+                        html += '<p>No pillar posts found in the recent 20 posts. Try analyzing more posts or check if your existing content meets the criteria.</p>';
+                    } else {
+                        html += '<h4>Found ' + pillarPosts.length + ' Pillar Posts:</h4>';
+                        html += '<ul>';
+                        pillarPosts.forEach(function(item) {
+                            html += '<li>';
+                            html += '<strong>' + item.analysis.post_title + '</strong> ';
+                            html += '(Score: ' + item.analysis.score + '%) ';
+                            html += '<a href="' + item.analysis.post_url + '" target="_blank">View</a> | ';
+                            html += '<a href="' + aibw_ajax.admin_url + '?post=' + item.post_id + '&action=edit" target="_blank">Edit</a> | ';
+                            html += '<button class="button button-small get-suggestions-inline-btn" data-post-id="' + item.post_id + '">Get Suggestions</button>';
+                            html += '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    html += '</div>';
+                    $result.html(html);
+                    
+                    // Add click handlers for inline suggestion buttons
+                    $('.get-suggestions-inline-btn').on('click', function() {
+                        var postId = $(this).data('post-id');
+                        $('#suggestion-post-id').val(postId);
+                        $('#get-suggestions-btn').click();
+                        // Scroll to suggestions section
+                        $('html, body').animate({
+                            scrollTop: $("#suggestions-result").offset().top - 100
+                        }, 500);
+                    });
+                } else {
+                    $result.html('<div style="color: red;">Error: ' + response.data + '</div>');
+                }
+            },
+            error: function() {
+                $result.html('<div style="color: red;">AJAX request failed</div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false).text('Find Pillar Posts');
+            }
+        });
+    });
+    
+    // View analysis details (from bulk results)
+    $(document).on('click', '.view-analysis-btn', function() {
+        var postId = $(this).data('post-id');
+        $('#analyze-post-id').val(postId);
+        $('#analyze-single-btn').click();
+        // Scroll to single analysis section
+        $('html, body').animate({
+            scrollTop: $("#single-analysis-result").offset().top - 100
+        }, 500);
+    });
 });
