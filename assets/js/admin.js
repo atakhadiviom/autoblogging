@@ -249,7 +249,7 @@ jQuery(document).ready(function($) {
             url: aibw_ajax.ajax_url,
             type: 'POST',
             data: {
-                action: 'aibw_analyze_post',
+                action: 'aibw_analyze_pillar',
                 nonce: aibw_ajax.nonce,
                 post_id: postId
             },
@@ -534,5 +534,74 @@ jQuery(document).ready(function($) {
         $('html, body').animate({
             scrollTop: $("#single-analysis-result").offset().top - 100
         }, 500);
+    });
+    
+    // SEO Content Generator
+    $('#seo-generate-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $btn = $('#seo-generate-btn');
+        var $loading = $('#seo-loading');
+        var $result = $('#seo-result');
+        
+        var topic = $('#seo-topic').val().trim();
+        var focusKeyword = $('#seo-focus-keyword').val().trim();
+        var secondaryKeywords = $('#seo-secondary-keywords').val().trim();
+        var status = $('#seo-status').val();
+        
+        if (!topic || !focusKeyword) {
+            alert('Please fill in both Topic and Focus Keyword');
+            return;
+        }
+        
+        if (!confirm('This will generate a comprehensive 2500+ word article. This may take 2-3 minutes. Continue?')) {
+            return;
+        }
+        
+        $btn.prop('disabled', true);
+        $loading.show();
+        $result.html('<div class="notice notice-info"><p>Starting SEO content generation...</p></div>');
+        
+        $.ajax({
+            url: aibw_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'aibw_generate_seo_content',
+                nonce: aibw_ajax.nonce,
+                topic: topic,
+                focus_keyword: focusKeyword,
+                secondary_keywords: secondaryKeywords,
+                status: status
+            },
+            success: function(response) {
+                if (response.success) {
+                    var data = response.data;
+                    var html = '<div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px;">';
+                    html += '<h3>✅ ' + data.message + '</h3>';
+                    html += '<p><strong>Title:</strong> ' + data.title + '</p>';
+                    html += '<p><strong>Focus Keyword:</strong> ' + data.focus_keyword + '</p>';
+                    html += '<p><strong>Meta Description:</strong> ' + data.meta_description + '</p>';
+                    html += '<p><strong>Preview:</strong> ' + data.preview + '</p>';
+                    html += '<p><strong>Post ID:</strong> ' + data.post_id + '</p>';
+                    html += '<p>';
+                    html += '<a href="' + data.post_url + '" target="_blank" class="button button-primary">View Post</a> ';
+                    html += '<a href="' + aibw_ajax.admin_url + '?post=' + data.post_id + '&action=edit" target="_blank" class="button button-secondary">Edit in WordPress</a>';
+                    html += '</p>';
+                    html += '</div>';
+                    $result.html(html);
+                } else {
+                    var errorHtml = '<div class="notice notice-error"><p><strong>Error:</strong> ' + response.data + '</p></div>';
+                    $result.html(errorHtml);
+                }
+            },
+            error: function() {
+                $result.html('<div class="notice notice-error"><p>AJAX request failed. Please check your connection and try again.</p></div>');
+            },
+            complete: function() {
+                $btn.prop('disabled', false);
+                $loading.hide();
+            }
+        });
     });
 });

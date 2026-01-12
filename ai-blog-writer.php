@@ -66,6 +66,9 @@ class AI_Blog_Writer {
         // Register AJAX handlers
         add_action('wp_ajax_aibw_generate_post', array($this->admin, 'ajax_generate_post'));
         add_action('wp_ajax_aibw_save_settings', array($this->admin, 'ajax_save_settings'));
+        add_action('wp_ajax_aibw_generate_seo_content', array($this->admin, 'ajax_generate_seo_content'));
+        add_action('wp_ajax_aibw_test_apis', array($this->admin, 'ajax_test_apis'));
+        add_action('wp_ajax_aibw_generate_batch', array($this->admin, 'ajax_generate_batch'));
         add_action('wp_ajax_aibw_analyze_pillar', array($this->admin, 'ajax_analyze_pillar'));
         add_action('wp_ajax_aibw_get_suggestions', array($this->admin, 'ajax_get_suggestions'));
         add_action('wp_ajax_aibw_bulk_analyze', array($this->admin, 'ajax_bulk_analyze'));

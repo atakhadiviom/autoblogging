@@ -45,6 +45,15 @@ class AIBW_Admin {
         
         add_submenu_page(
             'ai-blog-writer',
+            'SEO Content Generator',
+            'SEO Generator',
+            'manage_options',
+            'ai-blog-writer-seo',
+            array($this, 'render_seo_page')
+        );
+        
+        add_submenu_page(
+            'ai-blog-writer',
             'Pillar Analysis',
             'Pillar Analysis',
             'manage_options',
@@ -197,6 +206,106 @@ class AIBW_Admin {
                     </p>
                 </form>
                 <div id="ideas-result" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render SEO content generator page
+     */
+    public function render_seo_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die('Insufficient permissions');
+        }
+        
+        $settings = $this->api_handler->get_settings();
+        $api_errors = $this->api_handler->validate_api_keys();
+        ?>
+        <div class="wrap">
+            <h1>SEO Content Generator</h1>
+            <p>Generate comprehensive, RankMath-optimized articles (2500+ words) using your advanced prompt template.</p>
+            
+            <?php if (is_array($api_errors)): ?>
+                <div class="notice notice-error">
+                    <p><strong>API Configuration Required:</strong></p>
+                    <ul>
+                        <?php foreach ($api_errors as $error): ?>
+                            <li><?php echo esc_html($error); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                    <p>Please configure your API keys in the Settings tab.</p>
+                </div>
+            <?php endif; ?>
+            
+            <div class="card" style="max-width: 900px; margin-top: 20px;">
+                <h2>Generate SEO-Optimized Article</h2>
+                <p style="color: #666;">Creates pillar content with structured HTML, keyword optimization, and comprehensive coverage.</p>
+                
+                <form id="seo-generate-form" style="margin-top: 15px;">
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row"><label for="seo-topic">Article Topic</label></th>
+                            <td>
+                                <input type="text" id="seo-topic" name="topic" class="large-text" required 
+                                       placeholder="e.g., 'Complete Guide to Local SEO for Small Businesses'">
+                                <p class="description">The main topic for your comprehensive article</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="seo-focus-keyword">Focus Keyword</label></th>
+                            <td>
+                                <input type="text" id="seo-focus-keyword" name="focus_keyword" class="large-text" required
+                                       placeholder="e.g., 'local seo'">
+                                <p class="description">Primary keyword (must appear in title, first paragraph, and headings)</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="seo-secondary-keywords">Secondary Keywords</label></th>
+                            <td>
+                                <input type="text" id="seo-secondary-keywords" name="secondary_keywords" class="large-text"
+                                       placeholder="google my business, local search, map pack, citations, reviews">
+                                <p class="description">Comma-separated list of related keywords</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="seo-status">Post Status</label></th>
+                            <td>
+                                <select id="seo-status" name="status">
+                                    <option value="draft">Draft</option>
+                                    <option value="publish">Publish Immediately</option>
+                                    <option value="pending">Pending Review</option>
+                                </select>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <p class="submit">
+                        <button type="submit" id="seo-generate-btn" class="button button-primary button-large">
+                            Generate SEO Article (2500+ words)
+                        </button>
+                        <span id="seo-loading" style="display: none; margin-left: 10px; color: #0073aa;">
+                            Generating comprehensive content... (2-3 minutes)
+                        </span>
+                    </p>
+                </form>
+                
+                <div id="seo-result" style="margin-top: 20px;"></div>
+            </div>
+            
+            <div class="card" style="max-width: 900px; margin-top: 20px;">
+                <h2>SEO Content Features</h2>
+                <ul>
+                    <li><strong>Research Phase:</strong> Analyzes top 10 ranking pages via Perplexity API</li>
+                    <li><strong>SEO Title:</strong> Power words + numbers + focus keyword + under 60 chars</li>
+                    <li><strong>Content Structure:</strong> 15+ headings (H2-H4) with proper HTML hierarchy</li>
+                    <li><strong>Word Count:</strong> 2500+ words with 1-1.5% keyword density</li>
+                    <li><strong>Visual Content:</strong> 4+ image descriptions with alt text optimization</li>
+                    <li><strong>Internal/External Links:</strong> 3-4 internal + 3-5 authoritative external links</li>
+                    <li><strong>FAQ Section:</strong> 5 questions with detailed answers</li>
+                    <li><strong>Meta Description:</strong> 120-160 chars with CTA</li>
+                    <li><strong>RankMath Ready:</strong> Structured HTML, keyword placement, readability</li>
+                </ul>
             </div>
         </div>
         <?php
@@ -426,6 +535,58 @@ class AIBW_Admin {
     }
     
     /**
+     * AJAX: Generate SEO-optimized content
+     */
+    public function ajax_generate_seo_content() {
+        check_ajax_referer('aibw_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+        }
+        
+        $topic = sanitize_text_field($_POST['topic']);
+        $focus_keyword = sanitize_text_field($_POST['focus_keyword']);
+        $secondary_keywords = array_map('trim', explode(',', sanitize_text_field($_POST['secondary_keywords'])));
+        $status = sanitize_text_field($_POST['status']);
+        
+        if (empty($topic) || empty($focus_keyword)) {
+            wp_send_json_error('Topic and focus keyword are required');
+        }
+        
+        // Generate SEO content
+        $result = $this->post_generator->generate_seo_content($topic, $focus_keyword, $secondary_keywords);
+        
+        if (is_wp_error($result)) {
+            wp_send_json_error($result->get_error_message());
+        }
+        
+        // Create WordPress post
+        $post_id = $this->post_generator->create_wordpress_post($result, $status);
+        
+        if (is_wp_error($post_id)) {
+            wp_send_json_error($post_id->get_error_message());
+        }
+        
+        $post_url = get_permalink($post_id);
+        
+        // Store SEO metadata
+        update_post_meta($post_id, '_aibw_focus_keyword', $focus_keyword);
+        update_post_meta($post_id, '_aibw_secondary_keywords', $secondary_keywords);
+        update_post_meta($post_id, '_aibw_meta_description', sanitize_text_field($result['meta_description']));
+        update_post_meta($post_id, '_aibw_seo_optimized', true);
+        
+        wp_send_json_success(array(
+            'message' => 'SEO-optimized post generated successfully!',
+            'post_id' => $post_id,
+            'post_url' => $post_url,
+            'title' => $result['title'],
+            'focus_keyword' => $focus_keyword,
+            'meta_description' => $result['meta_description'],
+            'preview' => substr(strip_tags($result['content']), 0, 200) . '...'
+        ));
+    }
+    
+    /**
      * AJAX: Analyze single post for pillar potential
      */
     public function ajax_analyze_pillar() {
@@ -510,6 +671,85 @@ class AIBW_Admin {
         }
         
         $results = $this->pillar_analyzer->bulk_analyze($post_ids);
+        
+        wp_send_json_success($results);
+    }
+    
+    /**
+     * AJAX: Test API connections
+     */
+    public function ajax_test_apis() {
+        check_ajax_referer('aibw_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+        }
+        
+        $openrouter_result = $this->api_handler->test_openrouter();
+        $perplexity_result = $this->api_handler->test_perplexity();
+        
+        wp_send_json_success(array(
+            'openrouter' => $openrouter_result,
+            'perplexity' => $perplexity_result
+        ));
+    }
+    
+    /**
+     * AJAX: Generate batch posts
+     */
+    public function ajax_generate_batch() {
+        check_ajax_referer('aibw_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Insufficient permissions');
+        }
+        
+        $topics_str = sanitize_text_field($_POST['topics']);
+        $topics = array_filter(array_map('trim', explode("\n", $topics_str)));
+        
+        if (empty($topics)) {
+            wp_send_json_error('No topics provided');
+        }
+        
+        $results = array();
+        $count = 0;
+        
+        foreach ($topics as $topic) {
+            if ($count >= 3) { // Limit to 3 posts per batch
+                break;
+            }
+            
+            $result = $this->post_generator->generate_post($topic, '', 'professional');
+            
+            if (!is_wp_error($result)) {
+                $post_id = $this->post_generator->create_wordpress_post($result, 'draft');
+                
+                if (!is_wp_error($post_id)) {
+                    $results[] = array(
+                        'topic' => $topic,
+                        'post_id' => $post_id,
+                        'title' => $result['title'],
+                        'status' => 'success'
+                    );
+                    $count++;
+                } else {
+                    $results[] = array(
+                        'topic' => $topic,
+                        'status' => 'error',
+                        'message' => $post_id->get_error_message()
+                    );
+                }
+            } else {
+                $results[] = array(
+                    'topic' => $topic,
+                    'status' => 'error',
+                    'message' => $result->get_error_message()
+                );
+            }
+            
+            // Small delay to avoid overwhelming the server
+            usleep(100000); // 0.1 seconds
+        }
         
         wp_send_json_success($results);
     }
